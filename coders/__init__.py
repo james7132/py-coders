@@ -112,8 +112,9 @@ class ZlibCoder(Coder):
         decomp_buf = zlib.decompress(buf)
         return self.subcoder.decode(decomp_buf)
 
+
 try:
-    import protobuf
+    import protobuf                                        # noqa: F401
 
     class ProtobufCoder(Coder):
         """A Coder that encodes/decodes Google ProtoBuffer objects."""
