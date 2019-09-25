@@ -112,7 +112,7 @@ class StringCoder(Coder):
         return msg.encode(self.encoding)
 
     def decode(self, buf):
-        return None if buf is None else buf.decode(self.encoding)
+        return buf.decode(self.encoding)
 
 
 class ChainCoder(Coder):
@@ -250,9 +250,8 @@ class ZlibCoder(Coder):
 
     def decode(self, buf):
         assert len(buf) > 0
-        if buf[0] == self.UNCOMPRESSED:
-            return buf[1:]
-        return zlib.decompress(buf[1:])
+        return (zlib.decompress(buf[1:]) if buf[0] == self.COMPRESSED else
+                buf[1:])
 
 
 class EncryptedCoder(Coder):
@@ -293,19 +292,20 @@ class TupleCoder(Coder):
         self.default = default
 
     def encode(self, msg):
-        return tuple(self._encode_components(msg))
+        return tuple(self._to_tuple(msg, lambda c, m: c.encode(m)))
 
     def decode(self, msg):
-        raise NotImplementedError
+        assert len(msg) == len(self.coders)
+        return tuple(self._to_tuple(msg, lambda c, m: c.decode(m)))
 
-    def _encode_components(self, msg):
+    def _to_tuple(self, msg, func):
         msg = msg if isinstance(msg, tuple) else (msg,)
         assert len(msg) <= len(self.coders)
         for idx in range(len(self.coders)):
             if idx < len(msg):
-                yield self.coders[idx].encode(msg[idx])
+                yield func(self.coders[idx], msg[idx])
             else:
-                yield self.coders[idx].encode(self.default)
+                yield func(self.coders[idx], self.default)
 
 
 class ConstCoder(Coder):
@@ -321,7 +321,7 @@ class ConstCoder(Coder):
         return self.const
 
     def decode(self, msg):
-        raise NotImplementedError
+        return None
 
 
 try:
