@@ -6,7 +6,8 @@ import sys
 import zlib
 from abc import abstractmethod, ABC
 
-class Coder(object):
+
+class Coder(ABC):
     """An abstract base class for symmetric encoder/decoder objects."""
 
     @abstractmethod
@@ -22,8 +23,8 @@ class Coder(object):
     def then(self, next_coder):
         coder = ChainCoder([self, next_coder])
         if len(coder.encode_coders) == 1:
-            # Optimization to reduce call overhead if the flattened chain reduces
-            # to a singular coder.
+            # Optimization to reduce call overhead if the flattened chain
+            # reduces to a singular coder.
             return coder.encode_coders[0]
         return coder
 
@@ -33,7 +34,7 @@ class Coder(object):
         return self.then(PrefixCoder(prefix=prefix))
 
     def compressed(self, level=-1):
-        if level == 0: # No Compression
+        if level == 0:  # No Compression
             return self
         return self.then(ZlibCoder(level=level))
 
@@ -64,14 +65,14 @@ class Coder(object):
         """Same as decode_all, but works on async iterators.
         Returns a async generate of decoded values.
         """
-        return Coder._apply_all_async(self.decode, msgs, on_error=on_error)
+        return Coder._apply_all_async(self.decode, bufs, on_error=on_error)
 
     @staticmethod
     def _apply_all(func, iterable, on_error=None):
         for val in iterable:
             try:
                 yield func(val)
-            except:
+            except Exception:
                 if on_error is not None:
                     on_error(val, *sys.exc_info())
                 else:
@@ -82,7 +83,7 @@ class Coder(object):
         async for buf in bufs:
             try:
                 yield self.decode(buf)
-            except:
+            except Exception:
                 if on_error is not None:
                     on_error(buf, *sys.exc_info())
                 else:
@@ -113,21 +114,23 @@ class StringCoder(Coder):
     def decode(self, buf):
         return None if buf is None else buf.decode(self.encoding)
 
+
 class ChainCoder(Coder):
     """An aggregate coder that chains multiple subcoders together.
 
     Example:
         ChainCoder([JSONCoder(), ZlibCoder(level=5)])
 
-    Encoding is applied sequentially, so the output of one coder is the input to
-    the next. In the above example, an JSON object is encoded by the JSONCoder
-    then compressed by the ZlibCoder.
-    Decoding is applied sequentially in reverse. In the above example, the base
-    buffer is first decompressed by the ZlibCoder then decoded as a JSON object
-    by the JSONCoder.
+    Encoding is applied sequentially, so the output of one coder is the input
+    to the next. In the above example, an JSON object is encoded by the
+    JSONCoder then compressed by the ZlibCoder.
+    Decoding is applied sequentially in reverse. In the above example, the
+    base buffer is first decompressed by the ZlibCoder then decoded as a
+    JSON object by the JSONCoder.
 
     A shortcut to creating chain coders can be done using Coder.then:
         JSONCoder().then(ZlibCoder(level=5))
+
     Note that this does not modify any existing Coders.
     """
 
@@ -151,6 +154,7 @@ class ChainCoder(Coder):
             elif not isinstance(coder, IdentityCoder):
                 yield coder
 
+
 class IntCoder(Coder):
     """Coder for encoding integer values."""
 
@@ -163,11 +167,13 @@ class IntCoder(Coder):
     def decode(self, buf):
         return struct.unpack(self.format, buf)[0]
 
+
 class UInt16Coder(IntCoder):
     """A Coder that encodes/decodes big-endian 16-bit unsigned integers."""
 
     def __init__(self):
         super().__init__(">H")
+
 
 class UInt32Coder(IntCoder):
     """A Coder that encodes/decodes big-endian 32-bit unsigned integers."""
@@ -175,11 +181,13 @@ class UInt32Coder(IntCoder):
     def __init__(self):
         super().__init__(">L")
 
+
 class UInt64Coder(IntCoder):
     """A Coder that encodes/decodes big-endian 64-bit unsigned integers."""
 
     def __init__(self):
         super().__init__(">Q")
+
 
 class PickleCoder(Coder):
     """A Coder that encodes/decodes picklable objects."""
@@ -205,8 +213,10 @@ class PrefixCoder(Coder):
     """A Coder that prepends a prefix to the input message.
 
     Typically not created alone, but instead by calling Coder.prefixed instead.
-    This can be used to create prefixed values commonly used in key-value stores.
+    This can be used to create prefixed values commonly used in key-value
+    stores.
     """
+
     def __init__(self, prefix):
         self.prefix = prefix
 
@@ -215,6 +225,7 @@ class PrefixCoder(Coder):
 
     def decode(self, buf):
         return buf.replace(self.prefix, '')
+
 
 class ZlibCoder(Coder):
     """A Coder that compresses/decompresses the bytes-like objects with zlib.
@@ -243,6 +254,7 @@ class ZlibCoder(Coder):
             return buf[1:]
         return zlib.decompress(buf[1:])
 
+
 class EncryptedCoder(Coder):
     """A Coder that encrypts/decrypts buffers with a provided cipher.
 
@@ -264,6 +276,7 @@ class EncryptedCoder(Coder):
 
     def decode(self, buf):
         return self.cipher.decrypt(buf)
+
 
 class TupleCoder(Coder):
     """Aggregate Coder that applies individual coders on specific indicies of a
@@ -294,6 +307,7 @@ class TupleCoder(Coder):
             else:
                 yield self.coders[idx].encode(self.default)
 
+
 class ConstCoder(Coder):
     """A Coder that returns a constant regardless of input.
 
@@ -309,8 +323,9 @@ class ConstCoder(Coder):
     def decode(self, msg):
         raise NotImplementedError
 
+
 try:
-    from google.protobuf import message                             # noqa: F401
+    from google.protobuf import message  # noqa: F401
 
     class ProtobufCoder(Coder):
         """A Coder that encodes/decodes Google ProtoBuffer objects."""
@@ -328,5 +343,3 @@ try:
             return proto
 except ImportError:
     pass
-
-
