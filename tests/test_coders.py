@@ -12,10 +12,10 @@ PICKLE_TEST_CASES = [
 ]
 
 COMPRESSED_TEST_CASES = [
-    ({}, b'x\xda\xab\xae\x05\x00\x01u\x00\xf9'),
-    ([], b'x\xda\x8b\x8e\x05\x00\x01\x15\x00\xb9'),
-    ({"key": "value"},
-        b'x\xda\xabV\xcaN\xadT\xb2RP*K\xcc)MU\xaa\x05\x00+\xaf\x05A')
+    ({}, b'\x00{}'),
+    ([], b'\x00[]'),
+    ({ "key_1": "value_1", "key_2": "value_2", },
+    b'\x01x\xda\xabV\xcaN\xad\x8c7T\xb2RP*K\xcc)M\x052u\x14\xc0bF\x081#\xa5Z\x00\xf7\xee\x0c\x17')
 ]
 
 JSON_TEST_CASES = [
