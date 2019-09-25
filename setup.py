@@ -5,7 +5,7 @@ with open('README.md', 'r') as f:
 
 setuptools.setup(
     name="py-coders",
-    version="1.1.3",
+    version="1.1.4",
     author="James Liu",
     author_email="contact@jamessliu.com",
     description="A simple set of symmetric encoder/decoder classes for serializing to and from bytearrays.",

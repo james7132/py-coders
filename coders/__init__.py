@@ -224,7 +224,8 @@ class PrefixCoder(Coder):
         return self.prefix + msg
 
     def decode(self, buf):
-        return buf.replace(self.prefix, '')
+        assert buf.startswith(self.prefix)
+        return buf[len(self.prefix):]
 
 
 class ZlibCoder(Coder):
