@@ -1,11 +1,10 @@
 language: python
 cache: pip
 python:
-- 3.4
-- 3.5
 - 3.6
+- 3.7
 - 3.7-dev
-- pypy3.5
+- pypy3
 install:
 - pip install flake8
 - python setup.py develop
