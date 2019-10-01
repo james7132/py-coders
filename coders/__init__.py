@@ -336,7 +336,7 @@ try:
 
         def encode(self, msg):
             assert isinstance(msg, self.msg_type)
-            return msg.encodeToString()
+            return msg.SerializeToString()
 
         def decode(self, buf):
             proto = self.msg_type()
