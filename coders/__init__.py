@@ -4,6 +4,8 @@ import pickle
 import struct
 import sys
 import zlib
+import typing
+from typing import List, Tuple, Dict, Any
 from abc import abstractmethod, ABC
 
 
@@ -11,16 +13,16 @@ class Coder(ABC):
     """An abstract base class for symmetric encoder/decoder objects."""
 
     @abstractmethod
-    def encode(self, msg):
+    def encode(self, msg: Any) -> Any:
         """Encodes a python object into a bytes-like object"""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
-    def decode(self, buf):
+    def decode(self, buf: Any) -> Any:
         """Decodes a bytes-like object into a Python object."""
-        pass
+        raise NotImplementedError()
 
-    def then(self, next_coder):
+    def then(self, next_coder: Coder) -> ChainCoder:
         coder = ChainCoder([self, next_coder])
         if len(coder.encode_coders) == 1:
             # Optimization to reduce call overhead if the flattened chain
@@ -28,66 +30,72 @@ class Coder(ABC):
             return coder.encode_coders[0]
         return coder
 
-    def prefixed(self, prefix):
+    def prefixed(self, prefix: bytes) -> Coder:
         if len(prefix) <= 0:
             return self
         return self.then(PrefixCoder(prefix=prefix))
 
-    def compressed(self, level=-1):
+    def compressed(self, level: int = -1) -> Coder:
         if level == 0:  # No Compression
             return self
         return self.then(ZlibCoder(level=level))
 
-    def encrypted(self, cipher):
+    def encrypted(self, cipher) -> ChainCoder:
         return self.then(EncryptedCoder(cipher))
 
-    def encode_all(self, msgs, on_error=None):
+    def encode_all(self, msgs: typing.Iterable[Any],
+                  on_error=None) -> typing.Iterator[bytes]:
         """Encodes all values in a iterable of input objects.
         Calls on_error if specified on an error.
         Returns a generator of encoded values.
         """
-        return Coder._apply_all(self.encode, msgs, on_error=on_error)
+        return Coder._apply_all(msgs, self.encode, on_error=on_error)
 
-    def decode_all(self, bufs, on_error=None):
+    def decode_all(self, bufs: typing.Iterable[bytes],
+                   on_error=None) -> typing.Iterator[Any]:
         """Decodes all values in a iterable of input buffers.
         Calls on_error if specified on an error.
         Returns a generator of encoded values.
         """
-        return Coder._apply_all(self.decode, bufs, on_error=on_error)
+        return Coder._apply_all(bufs, self.decode, on_error=on_error)
 
-    def encode_all_async(self, msgs, on_error=None):
+    def encode_all_async(self, msgs: typing.AsyncIterable[Any],
+                         on_error=None) -> typing.AsyncIterator[bytes]:
         """Same as decode_all, but works on async iterators.
         Returns a async generate of decoded values.
         """
-        return Coder._apply_all_async(self.encode, msgs, on_error=on_error)
+        return Coder._apply_all_async(msgs, self.encode, on_error=on_error)
 
-    def decode_all_async(self, bufs, on_error=None):
+    def decode_all_async(self, bufs: typing.AsyncIterable[bytes],
+                         on_error=None) -> typing.AsyncIterable[Any]:
         """Same as decode_all, but works on async iterators.
         Returns a async generate of decoded values.
         """
-        return Coder._apply_all_async(self.decode, bufs, on_error=on_error)
+        return Coder._apply_all_async(bufs,self.decode, on_error=on_error)
 
     @staticmethod
-    def _apply_all(func, iterable, on_error=None):
-        for val in iterable:
+    def _apply_all(iterable: typing.Iterable[Any],
+                   func: typing.Callable[[Any], Any],
+                   on_error=None) -> typing.Iterator[Any]:
+        for obj in iterable:
             try:
-                yield func(val)
+                yield func(obj)
             except Exception:
-                if on_error is not None:
-                    on_error(val, *sys.exc_info())
-                else:
+                if on_error is None:
                     raise
+                on_error(obj, *sys.exc_info())
 
     @staticmethod
-    async def _apply_all_async(self, bufs, on_error=None):
-        async for buf in bufs:
+    async def _apply_all_async(iterable: typing.AsyncIterable[Any],
+                               func: typing.Callable[[Any], Any],
+                               on_error=None) -> typing.AsyncIterator[Any]:
+        async for obj in iterable:
             try:
-                yield self.decode(buf)
+                yield func(obj)
             except Exception:
-                if on_error is not None:
-                    on_error(buf, *sys.exc_info())
-                else:
+                if on_error is None:
                     raise
+                on_error(obj, *sys.exc_info())
 
 
 class IdentityCoder(Coder):
@@ -95,10 +103,10 @@ class IdentityCoder(Coder):
     any changes.
     """
 
-    def encode(self, msg):
+    def encode(self, msg: Any) -> Any:
         return msg
 
-    def decode(self, buf):
+    def decode(self, buf: Any) -> Any:
         return buf
 
 
@@ -108,10 +116,10 @@ class StringCoder(Coder):
     def __init__(self, encoding="utf-8"):
         self.encoding = encoding
 
-    def encode(self, msg):
+    def encode(self, msg: str) -> bytes:
         return msg.encode(self.encoding)
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> str:
         return buf.decode(self.encoding)
 
 
@@ -138,11 +146,11 @@ class ChainCoder(Coder):
         self.encode_coders = tuple(ChainCoder._flatten_coders(sub_coders))
         self.decode_coders = tuple(reversed(self.encode_coders))
 
-    def encode(self, msg):
+    def encode(self, msg: Any) -> Any:
         return functools.reduce(lambda m, c: c.encode(m),
                                 self.encode_coders, msg)
 
-    def decode(self, buf):
+    def decode(self, buf: Any) -> Any:
         return functools.reduce(lambda m, c: c.decode(m),
                                 self.decode_coders, buf)
 
@@ -161,10 +169,10 @@ class IntCoder(Coder):
     def __init__(self, format=">Q"):
         self.format = format
 
-    def encode(self, msg):
+    def encode(self, msg: int) -> bytes:
         return struct.pack(self.format, msg)
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> int:
         return struct.unpack(self.format, buf)[0]
 
 
@@ -191,21 +199,22 @@ class UInt64Coder(IntCoder):
 
 class PickleCoder(Coder):
     """A Coder that encodes/decodes picklable objects."""
-    def encode(self, msg):
+
+    def encode(self, msg: Any) -> bytes:
         return pickle.dumps(msg)
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> Any:
         return pickle.loads(buf)
 
 
 class JSONCoder(StringCoder):
     """A Coder that encodes/decodes JSON objects."""
 
-    def encode(self, msg):
+    def encode(self, msg: Any) -> bytes:
         json_str = json.dumps(msg, ensure_ascii=False)
         return super(JSONCoder, self).encode(json_str)
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> Any:
         return json.loads(super(JSONCoder, self).decode(buf))
 
 
@@ -217,13 +226,13 @@ class PrefixCoder(Coder):
     stores.
     """
 
-    def __init__(self, prefix):
+    def __init__(self, prefix: bytes):
         self.prefix = prefix
 
-    def encode(self, msg):
+    def encode(self, msg: bytes) -> bytes:
         return self.prefix + msg
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> bytes:
         assert buf.startswith(self.prefix)
         return buf[len(self.prefix):]
 
@@ -243,13 +252,13 @@ class ZlibCoder(Coder):
     def __init__(self, *, level=-1):
         self.level = level
 
-    def encode(self, msg):
+    def encode(self, msg: bytes) -> bytes:
         compressed = zlib.compress(msg, level=self.level)
         if len(msg) < len(compressed):
             return bytes([self.UNCOMPRESSED]) + msg
         return bytes([self.COMPRESSED]) + compressed
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> bytes:
         assert len(buf) > 0
         return (zlib.decompress(buf[1:]) if buf[0] == self.COMPRESSED else
                 buf[1:])
@@ -271,10 +280,10 @@ class EncryptedCoder(Coder):
     def __init__(self, cipher):
         self.cipher = cipher
 
-    def encode(self, msg):
+    def encode(self, msg: bytes) -> bytes:
         return self.cipher.encrypt(msg)
 
-    def decode(self, buf):
+    def decode(self, buf: bytes) -> bytes:
         return self.cipher.decrypt(buf)
 
 
@@ -288,14 +297,15 @@ class TupleCoder(Coder):
     Input tuples can be smaller than the prescribed size or non-tuples. If an
     input is of smaller size, the default value will be inserted in it's place.
     """
-    def __init__(self, sub_coders, default=None):
+    def __init__(self, sub_coders: Tuple[Coder, ...],
+                 default=Tuple[Any, ...]):
         self.coders = tuple(sub_coders)
         self.default = default
 
-    def encode(self, msg):
+    def encode(self, msg: Tuple[Any, ...]) -> Tuple[Any, ...]:
         return tuple(self._to_tuple(msg, lambda c, m: c.encode(m)))
 
-    def decode(self, msg):
+    def decode(self, msg: Tuple[Any, ...]) -> Tuple[Any, ...]:
         assert len(msg) == len(self.coders)
         return tuple(self._to_tuple(msg, lambda c, m: c.decode(m)))
 
@@ -312,21 +322,21 @@ class TupleCoder(Coder):
 class ConstCoder(Coder):
     """A Coder that returns a constant regardless of input.
 
-    Attempting to decode with this coder will fail.
+    Attempting to decode with this coder will return None.
     """
 
     def __init__(self, const):
         self.const = const
 
-    def encode(self, msg):
+    def encode(self, msg: bytes) -> bytes:
         return self.const
 
-    def decode(self, msg):
+    def decode(self, msg: bytes) -> None:
         return None
 
 
 try:
-    from google.protobuf import message  # noqa: F401
+    from google.protobuf.message import Message
 
     class ProtobufCoder(Coder):
         """A Coder that encodes/decodes Google ProtoBuffer objects."""
@@ -334,11 +344,11 @@ try:
         def __init__(self, msg_type):
             self.msg_type = msg_type
 
-        def encode(self, msg):
+        def encode(self, msg: Message) -> bytes:
             assert isinstance(msg, self.msg_type)
             return msg.SerializeToString()
 
-        def decode(self, buf):
+        def decode(self, buf: bytes) -> Message:
             proto = self.msg_type()
             proto.ParseFromString(buf)
             return proto
